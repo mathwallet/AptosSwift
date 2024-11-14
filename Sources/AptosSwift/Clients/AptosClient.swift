@@ -99,16 +99,17 @@ public class AptosClient: AptosClientBase {
         let queryParams: [String: Any] = ["estimate_gas_unit_price": estimateGasUnitPrice,
                                           "estimate_max_gas_amount": estimateMaxGasAmount,
                                           "estimate_prioritized_gas_unit_price": estimatePrioritizedGasUnitPrice]
-        return POST(path: "/v1/transactions/simulate",queryParameters: queryParams, body: try? BorshEncoder().encode(signedTransaction), headers: headers)
-    }
-    
-    public func _simulateTransaction(_ rawTransaction: AptosRawTransaction, publicKey: AptosPublicKeyEd25519, estimateGasUnitPrice: Bool = true, estimateMaxGasAmount: Bool = false, estimatePrioritizedGasUnitPrice: Bool = false) -> Promise<AptosClient.UserTransaction> {
-        let signedTransaction = rawTransaction.simulate(publicKey)
-        let headers: [String: String] = ["Content-Type": "application/x.aptos.signed_transaction+bcs"]
-        let queryParams: [String: Any] = ["estimate_gas_unit_price": estimateGasUnitPrice,
-                                          "estimate_max_gas_amount": estimateMaxGasAmount,
-                                          "estimate_prioritized_gas_unit_price": estimatePrioritizedGasUnitPrice]
-        return POST(path: "/v1/transactions/simulate",queryParameters: queryParams, body: try? BorshEncoder().encode(signedTransaction), headers: headers)
+        let (promise, seal) = Promise<[AptosClient.UserTransaction]>.pending()
+        POST(path: "/v1/transactions/simulate",queryParameters: queryParams, body: try? BorshEncoder().encode(signedTransaction), headers: headers).done { (transactions: [AptosClient.UserTransaction]) in
+            seal.fulfill(transactions)
+        }.catch { error in
+            self.POST(path: "/v1/transactions/simulate",queryParameters: queryParams, body: try? BorshEncoder().encode(signedTransaction), headers: headers).done { (transaction: AptosClient.UserTransaction) in
+                seal.fulfill([transaction])
+            }.catch { error in
+                seal.reject(error)
+            }
+        }
+        return promise
     }
     
     /// Get transaction by hash
